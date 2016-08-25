@@ -49,14 +49,20 @@ var main=function() {
 
   // Pass the screen size to the shaders as uniform and quad coordinates as attribute
   const screen_size_in = GL.getUniformLocation(SHADER_PROGRAM, "screen_size_in");
+  const global_time = GL.getUniformLocation(SHADER_PROGRAM, "global_time_in");
   const coord = GL.getAttribLocation(SHADER_PROGRAM, "coordinates");
   GL.enableVertexAttribArray(coord);
 
+  var time_old=0;
   var animate=function(time) {
+    var dt=time-time_old;
+    time_old=time;
+
     GL.viewport(0.0, 0.0, CANVAS.width, CANVAS.height);
     GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT);
 
     GL.uniform2f(screen_size_in, CANVAS.width, CANVAS.height);
+    GL.uniform1f(global_time, time_old/1000);
 
     GL.bindBuffer(GL.ARRAY_BUFFER, vertex_buffer);
     GL.vertexAttribPointer(coord, 3, GL.FLOAT, false, 0, 0);
