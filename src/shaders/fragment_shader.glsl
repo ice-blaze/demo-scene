@@ -95,15 +95,9 @@ vec3 rayDirection(float fieldOfView, vec2 screen_size, vec2 fragCoord) {
 }
 
 void main(void) {
-  vec3 dir = rayDirection(145.0, screen_size_out.xy, gl_FragCoord.xy);
-  vec3 eye = vec3(0.0, 10.0, 15.0);
+  vec3 dir = rayDirection(75.0, screen_size_out.xy, gl_FragCoord.xy);
+  vec3 eye = vec3(0.0, 2.0, 15.0);
   float dist = shortestDistanceToSurface(eye, dir, MIN_DIST, MAX_DIST);
-
-  // if (dist > MAX_DIST - EPSILON) {
-  //   // Didn't hit anything
-  //   gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
-  //   return;
-  // }
 
   vec3 p = eye + dist * dir;
 
