@@ -1,91 +1,297 @@
 precision highp float;
-varying vec2 screen_size_out;
-varying float global_time_out;
+varying vec2 vScreenSize;
+varying float vGlobalTime;
 
 const int MAX_MARCHING_STEPS = 10000;
 const float MIN_DIST = 0.0;
-const float MAX_DIST = 100.0;
+const float MAX_DIST = 255.0;
 const float EPSILON = 0.00001;
 
-float sphereSDF(vec3 samplePoint) {
-  // vec2 t = vec2(1.0,1.0);
-  // vec2 q = vec2(length(samplePoint.xz)-t.x,samplePoint.y);
-  // return length(q)-t.y;
-  return length(samplePoint) - 1.0;
+const int E_BOX      = 1;
+const int E_SPHERE   = 2;
+const int E_CYLINDER = 3;
+
+// float det(mat3 mat){
+//   return mat[0][0] * (mat[2][2] * mat[1][1] - mat[1][2] * mat[2][1])
+//        + mat[0][1] * (mat[1][2] * mat[2][0] - mat[2][2] * mat[1][0])
+//        + mat[0][2] * (mat[2][1] * mat[1][0] - mat[1][1] * mat[2][0]);
+// }
+//
+// mat3 inverse(mat3 mat){
+//   float invDet = 1.0/det(mat);
+//   mat3 res;
+//   // res[0][0] =  (mat[1][1]*mat[2][2]-mat[2][1]*mat[1][2])*invDet;
+//   // res[1][0] = -(mat[0][1]*mat[2][2]-mat[0][2]*mat[2][1])*invDet;
+//   // res[2][0] =  (mat[0][1]*mat[1][2]-mat[0][2]*mat[1][1])*invDet;
+//   // res[0][1] = -(mat[1][0]*mat[2][2]-mat[1][2]*mat[2][0])*invDet;
+//   // res[1][1] =  (mat[0][0]*mat[2][2]-mat[0][2]*mat[2][0])*invDet;
+//   // res[2][1] = -(mat[0][0]*mat[1][2]-mat[1][0]*mat[0][2])*invDet;
+//   // res[0][2] =  (mat[1][0]*mat[2][1]-mat[2][0]*mat[1][1])*invDet;
+//   // res[1][2] = -(mat[0][0]*mat[2][1]-mat[2][0]*mat[0][1])*invDet;
+//   // res[2][2] =  (mat[0][0]*mat[1][1]-mat[1][0]*mat[0][1])*invDet;
+//   return res;
+// }
+
+mat3 rotateX(float theta) {
+  float c = cos(theta);
+  float s = sin(theta);
+  return mat3(
+    vec3(1, 0, 0),
+    vec3(0, c, -s),
+    vec3(0, s, c)
+  );
+}
+
+mat3 rotateY(float theta) {
+  float c = cos(theta);
+  float s = sin(theta);
+  return mat3(
+    vec3(c, 0, s),
+    vec3(0, 1, 0),
+    vec3(-s, 0, c)
+  );
+}
+
+mat3 rotateZ(float theta) {
+  float c = cos(theta);
+  float s = sin(theta);
+  return mat3(
+    vec3(c, -s, 0),
+    vec3(s, c, 0),
+    vec3(0, 0, 1)
+  );
+}
+
+float intersectSDF(float distA, float distB) {
+  return max(distA, distB);
+}
+
+float unionSDF(float distA, float distB) {
+  return min(distA, distB);
+}
+
+float differenceSDF(float distA, float distB) {
+  return max(distA, -distB);
+}
+
+float sphereSDF( vec3 p, float s ) {
+  return length(p)-s;
+}
+
+float roundBoxSDF( vec3 p, vec3 b, float r ) {
+  return length(max(abs(p)-b,0.0))-r;
+}
+
+float torusSDF( vec3 p, vec2 t ) {
+  vec2 q = vec2(length(p.xz)-t.x,p.y);
+  return length(q)-t.y;
+}
+
+float cylinderSDF( vec3 p, vec3 c ) {
+  return length(p.xz-c.xy)-c.z;
+}
+
+float coneSDF( vec3 p, vec2 c ) {
+  // c must be normalized
+  float q = length(p.xy);
+  return dot(c,vec2(q,p.z));
+}
+
+float planeSDF( vec3 p, vec4 n ) {
+  // n must be normalized
+  return dot(p,n.xyz) + n.w;
+}
+
+float hexPrismSDF( vec3 p, vec2 h ) {
+  vec3 q = abs(p);
+  return max(q.z-h.y,max((q.x*0.866025+q.y*0.5),q.y)-h.x);
+}
+
+float triPrismSDF( vec3 p, vec2 h ) {
+  vec3 q = abs(p);
+  return max(q.z-h.y,max(q.x*0.866025+p.y*0.5,-p.y)-h.x*0.5);
+}
+
+float capsuleSDF( vec3 p, vec3 a, vec3 b, float r ) {
+  vec3 pa = p - a, ba = b - a;
+  float h = clamp( dot(pa,ba)/dot(ba,ba), 0.0, 1.0 );
+  return length( pa - ba*h ) - r;
+}
+
+float capCylinderSDF( vec3 p, vec2 h ) {
+  vec2 d = abs(vec2(length(p.xz),p.y)) - h;
+  return min(max(d.x,d.y),0.0) + length(max(d,0.0));
+}
+
+// not that well working
+float capConeSDF( in vec3 p, in vec3 c ) {
+  vec2 q = vec2( length(p.xz), p.y );
+  vec2 v = vec2( c.z*c.y/c.x, -c.z );
+  vec2 w = v - q;
+  vec2 vv = vec2( dot(v,v), v.x*v.x );
+  vec2 qv = vec2( dot(v,w), v.x*w.x );
+  vec2 d = max(qv,0.0)*qv/vv;
+  return sqrt( dot(w,w) - max(d.x,d.y) ) * sign(max(q.y*v.x-q.x*v.y,w.y));
+}
+
+float ellipsoidSDF( in vec3 p, in vec3 r ) {
+  return (length( p/r ) - 1.0) * min(min(r.x,r.y),r.z);
+}
+
+float dot2( in vec3 v ) { return dot(v,v); }
+float triangleSDF( vec3 p, vec3 a, vec3 b, vec3 c ) {
+  vec3 ba = b - a; vec3 pa = p - a;
+  vec3 cb = c - b; vec3 pb = p - b;
+  vec3 ac = a - c; vec3 pc = p - c;
+  vec3 nor = cross( ba, ac );
+
+  return sqrt(
+  (sign(dot(cross(ba,nor),pa)) +
+   sign(dot(cross(cb,nor),pb)) +
+   sign(dot(cross(ac,nor),pc))<2.0)
+   ?
+   min( min(
+   dot2(ba*clamp(dot(ba,pa)/dot2(ba),0.0,1.0)-pa),
+   dot2(cb*clamp(dot(cb,pb)/dot2(cb),0.0,1.0)-pb) ),
+   dot2(ac*clamp(dot(ac,pc)/dot2(ac),0.0,1.0)-pc) )
+   :
+   dot(nor,pa)*dot(nor,pa)/dot2(nor) );
+}
+
+float quadSDF( vec3 p, vec3 a, vec3 b, vec3 c, vec3 d ) {
+  vec3 ba = b - a; vec3 pa = p - a;
+  vec3 cb = c - b; vec3 pb = p - b;
+  vec3 dc = d - c; vec3 pc = p - c;
+  vec3 ad = a - d; vec3 pd = p - d;
+  vec3 nor = cross( ba, ad );
+
+  return sqrt(
+  (sign(dot(cross(ba,nor),pa)) +
+   sign(dot(cross(cb,nor),pb)) +
+   sign(dot(cross(dc,nor),pc)) +
+   sign(dot(cross(ad,nor),pd))<3.0)
+   ?
+   min( min( min(
+   dot2(ba*clamp(dot(ba,pa)/dot2(ba),0.0,1.0)-pa) ,
+   dot2(cb*clamp(dot(cb,pb)/dot2(cb),0.0,1.0)-pb) ),
+   dot2(dc*clamp(dot(dc,pc)/dot2(dc),0.0,1.0)-pc) ),
+   dot2(ad*clamp(dot(ad,pd)/dot2(ad),0.0,1.0)-pd) )
+   :
+   dot(nor,pa)*dot(nor,pa)/dot2(nor) );
+}
+
+float boxSDF( vec3 p, vec3 b ) {
+  return length(max(abs(p)-b,0.0));
+}
+
+float opScale2( vec3 p, vec3 b, float s ) {
+    return boxSDF(p/s, b)*s;
+}
+
+float opScale( vec3 p, vec3 b, vec3 c) {
+  vec3 q = mod(p,c)-0.5*c;
+  return boxSDF(q, b);
+}
+
+float lengthPow(vec2 p, float power) {
+  return pow(pow(p.x,power)+pow(p.y,power),1./power);
+}
+
+float squareTorusSDF( vec3 p, vec2 t, float power ) {
+  vec2 q = vec2(lengthPow(p.xz,power)-t.x,p.y);
+  return lengthPow(q,power)-t.y;
 }
 
 float sceneSDF(vec3 samplePoint) {
-  return sphereSDF(samplePoint);
+  // vec3 cubePoint = (rotateY(-vGlobalTime) * samplePoint).xyz;
+  vec3 v3Unit = vec3(1., 1., 1.);
+  float box = boxSDF(samplePoint, v3Unit);
+  float rbox = roundBoxSDF(samplePoint, v3Unit, .2);
+  float torus = torusSDF(samplePoint, vec2(1.,0.2));
+  float cylinder = cylinderSDF(samplePoint, v3Unit);
+  float cone = coneSDF(samplePoint, vec2(0.1,0.01));
+  float plane = planeSDF(samplePoint, vec4(0.,1.,1.,0.));
+  float hexPri = hexPrismSDF(samplePoint, vec2(1.,1.));
+  float triPri = triPrismSDF(samplePoint, vec2(1.,1.));
+  float capsuleCorp = capsuleSDF(samplePoint, v3Unit, vec3(1.,1.,2.), 1.);
+  float capCyn = capCylinderSDF(samplePoint, vec2(1.,1.));
+  float capCone = capConeSDF(samplePoint, vec3(1.,2., 3.));
+  float ellipsoid = ellipsoidSDF(samplePoint, vec3(1.,2.,3.));
+  float triangle = triangleSDF(samplePoint, vec3(1.,0.,0.),vec3(0.,1.,0.),vec3(0.,1.,1.));
+  float quad = quadSDF(samplePoint, vec3(1.,0.,0.),vec3(0.,1.,0.),vec3(0.,10.,1.),vec3(1.,1.,0.));
+  float sqrTorus = squareTorusSDF( samplePoint, vec2(1.,.2), 8. );
+  float test = opScale(samplePoint, v3Unit, vec3(8., 4., 4.));
+  return test;
 }
 
 float shortestDistanceToSurface(vec3 eye, vec3 marchingDirection, float start, float end) {
-    float depth = start;
-    for (int i = 0; i < MAX_MARCHING_STEPS; ++i) {
-        float dist = sceneSDF(eye + depth * marchingDirection);
-        if (dist < EPSILON) {
-          return depth;
-        }
-        depth += dist;
-        if (depth >= end) {
-            return end;
-        }
+  float depth = start;
+  for (int i = 0; i < MAX_MARCHING_STEPS; ++i) {
+    float dist = sceneSDF(eye + depth * marchingDirection);
+    if (dist < EPSILON) {
+      return depth;
     }
-    return end;
+    depth += dist;
+    if (depth >= end) {
+      return end;
+    }
+  }
+  return end;
 }
 
 vec3 estimateNormal(vec3 p) {
-   return normalize(vec3(
-       sceneSDF(vec3(p.x + EPSILON, p.y, p.z)) - sceneSDF(vec3(p.x - EPSILON, p.y, p.z)),
-       sceneSDF(vec3(p.x, p.y + EPSILON, p.z)) - sceneSDF(vec3(p.x, p.y - EPSILON, p.z)),
-       sceneSDF(vec3(p.x, p.y, p.z  + EPSILON)) - sceneSDF(vec3(p.x, p.y, p.z - EPSILON))
-   ));
+  return normalize(vec3(
+    sceneSDF(vec3(p.x + EPSILON, p.y, p.z)) - sceneSDF(vec3(p.x - EPSILON, p.y, p.z)),
+    sceneSDF(vec3(p.x, p.y + EPSILON, p.z)) - sceneSDF(vec3(p.x, p.y - EPSILON, p.z)),
+    sceneSDF(vec3(p.x, p.y, p.z  + EPSILON)) - sceneSDF(vec3(p.x, p.y, p.z - EPSILON))
+  ));
 }
 
 vec3 phongContribForLight(vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 eye,
                           vec3 lightPos, vec3 lightIntensity) {
-    vec3 N = estimateNormal(p);
-    vec3 L = normalize(lightPos - p);
-    vec3 V = normalize(eye - p);
-    vec3 R = normalize(reflect(-L, N));
+  vec3 N = estimateNormal(p);
+  vec3 L = normalize(lightPos - p);
+  vec3 V = normalize(eye - p);
+  vec3 R = normalize(reflect(-L, N));
 
-    float dotLN = dot(L, N);
-    float dotRV = dot(R, V);
+  float dotLN = dot(L, N);
+  float dotRV = dot(R, V);
 
-    if (dotLN < 0.0) {
-        // Light not visible from this point on the surface
-        return vec3(0.0, 0.0, 0.0);
-    }
+  if (dotLN < 0.0) {
+    // Light not visible from this point on the surface
+    return vec3(0.0, 0.0, 0.0);
+  }
 
-    if (dotRV < 0.0) {
-        // Light reflection in opposite direction as viewer, apply only diffuse
-        // component
-        return lightIntensity * (k_d * dotLN);
-    }
-    return lightIntensity * (k_d * dotLN + k_s * pow(dotRV, alpha));
+  if (dotRV < 0.0) {
+    // Light reflection in opposite direction as viewer, apply only diffuse
+    // component
+    return lightIntensity * (k_d * dotLN);
+  }
+  return lightIntensity * (k_d * dotLN + k_s * pow(dotRV, alpha));
 }
 
 vec3 phongIllumination(vec3 k_a, vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 eye) {
-    const vec3 ambientLight = 0.5 * vec3(1.0, 1.0, 1.0);
-    vec3 color = ambientLight * k_a;
+  const vec3 ambientLight = 0.5 * vec3(1.0, 1.0, 1.0);
+  vec3 color = ambientLight * k_a;
 
-    vec3 light1Pos = vec3(4.0 * sin(global_time_out),
-                          2.0,
-                          4.0 * cos(global_time_out));
-    vec3 light1Intensity = vec3(0.4, 0.4, 0.4);
+  vec3 light1Pos = vec3(4.0 * sin(vGlobalTime),
+                        2.0,
+                        4.0 * cos(vGlobalTime));
+  vec3 light1Intensity = vec3(0.4, 0.4, 0.4);
 
-    color += phongContribForLight(k_d, k_s, alpha, p, eye,
-                                  light1Pos,
-                                  light1Intensity);
+  color += phongContribForLight(k_d, k_s, alpha, p, eye,
+                                light1Pos,
+                                light1Intensity);
 
-    vec3 light2Pos = vec3(2.0 * sin(0.37 * global_time_out),
-                          2.0 * cos(0.37 * global_time_out),
-                          2.0);
-    vec3 light2Intensity = vec3(0.4, 0.4, 0.4);
+  vec3 light2Pos = vec3(2.0 * sin(0.37 * vGlobalTime),
+                        2.0 * cos(0.37 * vGlobalTime),
+                        2.0);
+  vec3 light2Intensity = vec3(0.4, 0.4, 0.4);
 
-    color += phongContribForLight(k_d, k_s, alpha, p, eye,
-                                  light2Pos,
-                                  light2Intensity);
-    return color;
+  color += phongContribForLight(k_d, k_s, alpha, p, eye,
+                                light2Pos,
+                                light2Intensity);
+  return color;
 }
 
 vec3 rayDirection(float fieldOfView, vec2 screen_size, vec2 fragCoord) {
@@ -94,27 +300,47 @@ vec3 rayDirection(float fieldOfView, vec2 screen_size, vec2 fragCoord) {
   return normalize(vec3(xy, -z));
 }
 
+mat4 viewMatrix(vec3 eye, vec3 center, vec3 up) {
+  // Based on gluLookAt man page
+  vec3 f = normalize(center - eye);
+  vec3 s = cross(f, up);
+  vec3 u = cross(s, f);
+  return mat4(
+      vec4(s, 0.0),
+      vec4(u, 0.0),
+      vec4(-f, 0.0),
+      vec4(0.0, 0.0, 0.0, 1)
+  );
+}
+
+
 void main(void) {
-  vec3 dir = rayDirection(145.0, screen_size_out.xy, gl_FragCoord.xy);
-  vec3 eye = vec3(0.0, 4.0, 3.0);
-  float dist = shortestDistanceToSurface(eye, dir, MIN_DIST, MAX_DIST);
+  vec3 viewDir = rayDirection(145.0, vScreenSize.xy, gl_FragCoord.xy);
+  vec3 eye = vec3(8.0, 5.0 * sin(0.2 * vGlobalTime), 10.0 * sin(0.2 * vGlobalTime));
+
+  mat4 viewToWorld = viewMatrix(eye, vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+  vec3 worldDir = (viewToWorld * vec4(viewDir, 0.0)).xyz;
+
+  float dist = shortestDistanceToSurface(eye, worldDir, MIN_DIST, MAX_DIST);
 
   // could be an optimisation, but need to be tested
-  // if (dist > MAX_DIST - EPSILON) {
-  //   // Didn't hit anything
-  //   gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-  //   return;
-  // }
+  if (dist > MAX_DIST - EPSILON) {
+    // Didn't hit anything
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
 
-  vec3 p = eye + dist * dir;
+  vec3 p = eye + dist * worldDir;
 
-  vec3 K_a = vec3(0.2, 0.2, 0.2);
-  vec3 K_d = vec3(0.7, 0.2, 0.2);
+  vec3 K_a = (estimateNormal(p) + vec3(1.0)) / 2.0;
+  vec3 K_d = K_a;
   vec3 K_s = vec3(1.0, 1.0, 1.0);
   // vec3 K_s = vec3(0.0, 0.0, 0.0);
   float shininess = 10.0;
 
   vec3 color = phongIllumination(K_a, K_d, K_s, shininess, p, eye);
+
+
 
   gl_FragColor = vec4(color, 1.0);
   // gl_FragColor = vec4(1.0/dist, 0.0, 0.0, 1.0);
