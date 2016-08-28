@@ -4,7 +4,7 @@ varying float vGlobalTime;
 
 const int MAX_MARCHING_STEPS = 10000;
 const float MIN_DIST = 0.0;
-const float MAX_DIST = 255.0;
+const float MAX_DIST = 50.0;
 const float EPSILON = 0.00001;
 
 const int E_BOX      = 1;
@@ -188,9 +188,9 @@ float opScale2( vec3 p, vec3 b, float s ) {
     return boxSDF(p/s, b)*s;
 }
 
-float opScale( vec3 p, vec3 b, vec3 c) {
+float opRep( vec3 p, vec2 b, vec3 c) {
   vec3 q = mod(p,c)-0.5*c;
-  return boxSDF(q, b);
+  return torusSDF(q, b);
 }
 
 float lengthPow(vec2 p, float power) {
@@ -200,6 +200,43 @@ float lengthPow(vec2 p, float power) {
 float squareTorusSDF( vec3 p, vec2 t, float power ) {
   vec2 q = vec2(lengthPow(p.xz,power)-t.x,p.y);
   return lengthPow(q,power)-t.y;
+}
+
+float displacement(vec3 p){
+  return sin(4.*p.x)*sin(1.*p.y)*sin(1.*p.z);
+}
+
+float displaceSDF( vec3 p, vec2 b, vec3 c ) {
+  float d1 = opRep(p, b, c);
+  float d2 = displacement(p);
+  return d1+d2;
+}
+
+float smin( float a, float b, float k ) {
+  float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+  return mix( b, a, h ) - k*h*(1.0-h);
+}
+
+float blendSDF( vec3 p ) {
+  float d1 = boxSDF(p, vec3(7., 0.4, 0.2));
+  float d2 = torusSDF(p, vec2(4., 1.));
+  return smin( d1, d2, .6 );
+}
+
+float twistSDF( vec3 p ) {
+  float c = cos(1.*p.y);
+  float s = sin(1.*p.y);
+  mat2  m = mat2(c,-s,s,c);
+  vec3  q = vec3(m*p.xz,p.y);
+  return  torusSDF(q, vec2(4., 1.));;
+}
+
+float cheapBendSDF( vec3 p ) {
+    float c = cos(.3*p.y);
+    float s = sin(.3*p.y);
+    mat2  m = mat2(c,-s,s,c);
+    vec3  q = vec3(m*p.xy,p.z);
+    return boxSDF(q, vec3(2., 3., 1.));
 }
 
 float sceneSDF(vec3 samplePoint) {
@@ -220,8 +257,12 @@ float sceneSDF(vec3 samplePoint) {
   float triangle = triangleSDF(samplePoint, vec3(1.,0.,0.),vec3(0.,1.,0.),vec3(0.,1.,1.));
   float quad = quadSDF(samplePoint, vec3(1.,0.,0.),vec3(0.,1.,0.),vec3(0.,10.,1.),vec3(1.,1.,0.));
   float sqrTorus = squareTorusSDF( samplePoint, vec2(1.,.2), 8. );
-  float test = opScale(samplePoint, v3Unit, vec3(8., 4., 4.));
-  return test;
+  float repetition = opRep(samplePoint, vec2(1.,2.), vec3(8., 4., 4.));
+  float displace = displaceSDF(samplePoint, vec2(4.,.5), vec3(12., 12., 12.));
+  float blend = blendSDF(samplePoint);
+  float twist = twistSDF(samplePoint);
+  float bend = cheapBendSDF(samplePoint);
+  return twist;
 }
 
 float shortestDistanceToSurface(vec3 eye, vec3 marchingDirection, float start, float end) {
@@ -231,7 +272,7 @@ float shortestDistanceToSurface(vec3 eye, vec3 marchingDirection, float start, f
     if (dist < EPSILON) {
       return depth;
     }
-    depth += dist;
+    depth += dist/4.;
     if (depth >= end) {
       return end;
     }
@@ -316,7 +357,7 @@ mat4 viewMatrix(vec3 eye, vec3 center, vec3 up) {
 
 void main(void) {
   vec3 viewDir = rayDirection(145.0, vScreenSize.xy, gl_FragCoord.xy);
-  vec3 eye = vec3(8.0, 5.0 * sin(0.2 * vGlobalTime), 10.0 * sin(0.2 * vGlobalTime));
+  vec3 eye = vec3(8.0+vGlobalTime, 5.0 * sin(0.2 * vGlobalTime), 10.0 * sin(0.2 * vGlobalTime));
 
   mat4 viewToWorld = viewMatrix(eye, vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
   vec3 worldDir = (viewToWorld * vec4(viewDir, 0.0)).xyz;
@@ -333,8 +374,9 @@ void main(void) {
   vec3 p = eye + dist * worldDir;
 
   vec3 K_a = (estimateNormal(p) + vec3(1.0)) / 2.0;
+  // vec3 K_a = (vec3(1.0)) / 2.0;
   vec3 K_d = K_a;
-  vec3 K_s = vec3(1.0, 1.0, 1.0);
+  vec3 K_s = vec3(.6, .6, .6);
   // vec3 K_s = vec3(0.0, 0.0, 0.0);
   float shininess = 10.0;
 
@@ -343,5 +385,5 @@ void main(void) {
 
 
   gl_FragColor = vec4(color, 1.0);
-  // gl_FragColor = vec4(1.0/dist, 0.0, 0.0, 1.0);
+  // gl_FragColor = vec4(dist, 0.0, 0.0, 1.0);
 }
