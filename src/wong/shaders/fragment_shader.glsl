@@ -2,10 +2,10 @@ precision highp float;
 varying vec2 vScreenSize;
 varying float vGlobalTime;
 
-const int MAX_MARCHING_STEPS = 10000;
+const int MAX_MARCHING_STEPS = 1000000;
 const float MIN_DIST = 0.0;
-const float MAX_DIST = 50.0;
-const float EPSILON = 0.00001;
+const float MAX_DIST = 255.0;
+const float EPSILON = 0.0001;
 
 const int E_BOX      = 1;
 const int E_SPHERE   = 2;
@@ -62,6 +62,7 @@ mat3 rotateZ(float theta) {
   );
 }
 
+// when as parameter we have two floats, it's better to use vector, they are optimized in memory use
 float intersectSDF(float distA, float distB) {
   return max(distA, distB);
 }
@@ -97,9 +98,11 @@ float coneSDF( vec3 p, vec2 c ) {
   return dot(c,vec2(q,p.z));
 }
 
-float planeSDF( vec3 p, vec4 n ) {
+// float planeSDF( vec3 p, vec4 n ) {
+float planeSDF( vec3 p ) {
   // n must be normalized
-  return dot(p,n.xyz) + n.w;
+  return p.y;
+  // return dot(p,n.xyz) + n.w;
 }
 
 float hexPrismSDF( vec3 p, vec2 h ) {
@@ -242,27 +245,47 @@ float cheapBendSDF( vec3 p ) {
 float sceneSDF(vec3 samplePoint) {
   // vec3 cubePoint = (rotateY(-vGlobalTime) * samplePoint).xyz;
   vec3 v3Unit = vec3(1., 1., 1.);
-  float box = boxSDF(samplePoint, v3Unit);
-  float rbox = roundBoxSDF(samplePoint, v3Unit, .2);
-  float torus = torusSDF(samplePoint, vec2(1.,0.2));
-  float cylinder = cylinderSDF(samplePoint, v3Unit);
-  float cone = coneSDF(samplePoint, vec2(0.1,0.01));
-  float plane = planeSDF(samplePoint, vec4(0.,1.,1.,0.));
-  float hexPri = hexPrismSDF(samplePoint, vec2(1.,1.));
-  float triPri = triPrismSDF(samplePoint, vec2(1.,1.));
-  float capsuleCorp = capsuleSDF(samplePoint, v3Unit, vec3(1.,1.,2.), 1.);
-  float capCyn = capCylinderSDF(samplePoint, vec2(1.,1.));
-  float capCone = capConeSDF(samplePoint, vec3(1.,2., 3.));
-  float ellipsoid = ellipsoidSDF(samplePoint, vec3(1.,2.,3.));
-  float triangle = triangleSDF(samplePoint, vec3(1.,0.,0.),vec3(0.,1.,0.),vec3(0.,1.,1.));
-  float quad = quadSDF(samplePoint, vec3(1.,0.,0.),vec3(0.,1.,0.),vec3(0.,10.,1.),vec3(1.,1.,0.));
-  float sqrTorus = squareTorusSDF( samplePoint, vec2(1.,.2), 8. );
-  float repetition = opRep(samplePoint, vec2(1.,2.), vec3(8., 4., 4.));
-  float displace = displaceSDF(samplePoint, vec2(4.,.5), vec3(12., 12., 12.));
-  float blend = blendSDF(samplePoint);
-  float twist = twistSDF(samplePoint);
-  float bend = cheapBendSDF(samplePoint);
-  return twist;
+  vec3 v3offset = vec3(10.,0.,0.);
+  float res = 100000.;
+  // vec3 c = vec3(60.,10.,60.);
+  // samplePoint = mod(samplePoint,c)-0.5*c;
+  // res = unionSDF(res, twistSDF(samplePoint));
+  // samplePoint += v3offset;
+  res = unionSDF(res, boxSDF(samplePoint-vec3(0.,-5.,0.), vec3(1000.,1.,1000.)));
+  res = unionSDF(res, boxSDF(samplePoint, v3Unit));
+  samplePoint += v3offset;
+  res = unionSDF(res, roundBoxSDF(samplePoint, v3Unit, .2));
+  samplePoint += v3offset;
+  res = unionSDF(res, torusSDF(samplePoint, vec2(1.,0.2)));
+  samplePoint += v3offset;
+  // res = unionSDF(res, cylinderSDF(samplePoint, v3Unit));
+  // res = unionSDF(res, coneSDF(samplePoint, vec2(0.1,0.01)));
+  // res = unionSDF(res, planeSDF(samplePoint, vec4(0.,1.,1.,0.)));
+  // res = unionSDF(res, planeSDF(samplePoint+vec3(30.0)));
+  res = unionSDF(res, hexPrismSDF(samplePoint, vec2(1.,1.)));
+  samplePoint -= v3offset*3.;
+  samplePoint += vec3(0.,0.,8.);
+  res = unionSDF(res, triPrismSDF(samplePoint, vec2(1.,1.)));
+  samplePoint += v3offset;
+  res = unionSDF(res, capsuleSDF(samplePoint, v3Unit, vec3(1.,1.,2.), 1.));
+  samplePoint += v3offset;
+  res = unionSDF(res, capCylinderSDF(samplePoint, vec2(1.,1.)));
+  samplePoint += v3offset;
+  // res = unionSDF(res, capConeSDF(samplePoint, vec3(1.,2., 3.)));
+  res = unionSDF(res, ellipsoidSDF(samplePoint, vec3(1.,2.,3.)));
+  samplePoint += v3offset;
+  // res = unionSDF(res, triangleSDF(samplePoint, vec3(1.,0.,0.),vec3(0.,1.,0.),vec3(0.,1.,1.)));
+  // res = unionSDF(res, quadSDF(samplePoint, vec3(1.,0.,0.),vec3(0.,1.,0.),vec3(0.,10.,1.),vec3(1.,1.,0.)));
+  res = unionSDF(res, squareTorusSDF( samplePoint, vec2(1.,.2), 8. ));
+  samplePoint += v3offset;
+  // res = unionSDF(res, opRep(samplePoint, vec2(1.,2.), vec3(8., 4., 4.)));
+  // res = unionSDF(res, displaceSDF(samplePoint, vec2(4.,.5), vec3(12., 12., 12.)));
+  res = unionSDF(res, blendSDF(samplePoint));
+  samplePoint += v3offset;
+
+  res = unionSDF(res, cheapBendSDF(samplePoint));
+  samplePoint += v3offset;
+  return res;
 }
 
 float shortestDistanceToSurface(vec3 eye, vec3 marchingDirection, float start, float end) {
@@ -357,7 +380,8 @@ mat4 viewMatrix(vec3 eye, vec3 center, vec3 up) {
 
 void main(void) {
   vec3 viewDir = rayDirection(145.0, vScreenSize.xy, gl_FragCoord.xy);
-  vec3 eye = vec3(8.0+vGlobalTime, 5.0 * sin(0.2 * vGlobalTime), 10.0 * sin(0.2 * vGlobalTime));
+  // vec3 eye = vec3(8.0+vGlobalTime, 5.0 * sin(0.2 * vGlobalTime), 10.0 * sin(0.2 * vGlobalTime));
+  vec3 eye = vec3(10.0, 3.0 + sin(0.2 * vGlobalTime), -10.0 * sin(0.2 * vGlobalTime));
 
   mat4 viewToWorld = viewMatrix(eye, vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
   vec3 worldDir = (viewToWorld * vec4(viewDir, 0.0)).xyz;
@@ -382,7 +406,7 @@ void main(void) {
 
   vec3 color = phongIllumination(K_a, K_d, K_s, shininess, p, eye);
 
-
+  color = pow( color, vec3(0.8) );
 
   gl_FragColor = vec4(color, 1.0);
   // gl_FragColor = vec4(dist, 0.0, 0.0, 1.0);
