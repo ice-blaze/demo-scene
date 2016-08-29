@@ -2,7 +2,7 @@ precision highp float;
 varying vec2 vScreenSize;
 varying float vGlobalTime;
 
-const int MAX_MARCHING_STEPS = 1000000;
+const int MAX_MARCHING_STEPS = 63000; // can't go higher because of android
 const float MIN_DIST = 0.0;
 const float MAX_DIST = 255.0;
 const float EPSILON = 0.0001;
@@ -36,9 +36,9 @@ mat3 rotateX(float theta) {
   float c = cos(theta);
   float s = sin(theta);
   return mat3(
-    vec3(1, 0, 0),
-    vec3(0, c, -s),
-    vec3(0, s, c)
+    vec3(1., 0., 0.),
+    vec3(0., c, -s),
+    vec3(0., s, c)
   );
 }
 
@@ -46,9 +46,9 @@ mat3 rotateY(float theta) {
   float c = cos(theta);
   float s = sin(theta);
   return mat3(
-    vec3(c, 0, s),
-    vec3(0, 1, 0),
-    vec3(-s, 0, c)
+    vec3(c, 0., s),
+    vec3(0., 1., 0.),
+    vec3(-s, 0., c)
   );
 }
 
@@ -56,9 +56,9 @@ mat3 rotateZ(float theta) {
   float c = cos(theta);
   float s = sin(theta);
   return mat3(
-    vec3(c, -s, 0),
-    vec3(s, c, 0),
-    vec3(0, 0, 1)
+    vec3(c, -s, 0.),
+    vec3(s, c, 0.),
+    vec3(0., 0., 1.)
   );
 }
 
