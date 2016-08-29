@@ -2,7 +2,7 @@ precision highp float;
 varying vec2 vScreenSize;
 varying float vGlobalTime;
 
-const int MAX_MARCHING_STEPS = 1000000;
+const int MAX_MARCHING_STEPS = 63000; // can't go higher because of android
 const float MIN_DIST = 0.0;
 const float MAX_DIST = 255.0;
 const float EPSILON = 0.0001;
