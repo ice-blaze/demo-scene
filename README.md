@@ -1,6 +1,5 @@
-# DSWong
-Demo Scene Inspired from Jamie Wong blog post: http://jamie-wong.com/2016/07/15/ray-marching-signed-distance-functions/
-
+# Demo Scene
 CSG demo scene with webgl. You can see here the power of the fragment shader.
+All porjects are inspired from blog posts related to signed distance function and/or constructive solid geometry.
 
-Try the demo here: https://ice-blaze.github.io/DSWong/
+Try the demo here: https://ice-blaze.github.io/demo-scene/
