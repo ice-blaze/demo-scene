@@ -249,7 +249,7 @@ float sceneSDF(vec3 samplePoint) {
   float res = 100000.;
   // vec3 c = vec3(60.,10.,60.);
   // samplePoint = mod(samplePoint,c)-0.5*c;
-  res = unionSDF(res, twistSDF(samplePoint + vec3(0.,0.,10.)));
+  // res = unionSDF(res, twistSDF(samplePoint + vec3(0.,0.,10.)));
   // res = unionSDF(res, boxSDF(samplePoint-vec3(0.,-5.,0.), vec3(1000.,1.,1000.)));
   // res = unionSDF(res, boxSDF(samplePoint, v3Unit));
   // samplePoint += v3offset;
@@ -277,12 +277,12 @@ float sceneSDF(vec3 samplePoint) {
   // res = unionSDF(res, quadSDF(samplePoint, vec3(1.,0.,0.),vec3(0.,1.,0.),vec3(0.,10.,1.),vec3(1.,1.,0.)));
   // res = unionSDF(res, squareTorusSDF( samplePoint, vec2(1.,.2), 8. ));
   // samplePoint += v3offset;
-  // res = unionSDF(res, opRep(samplePoint, vec2(1.,2.), vec3(8., 4., 4.)));
-  res = unionSDF(res, displaceSDF(samplePoint, vec2(4.,.5), vec3(15., 30., 30.)));
-  res = unionSDF(res, blendSDF(samplePoint));
+  // res = unionSDF(res, opRep(samplePoint, vec2(1.,2.), vec3(10., 5., 10.)));
+  res = unionSDF(res, displaceSDF(samplePoint, vec2(4.,.5), vec3(7., 5., 20.)));
+  // res = unionSDF(res, blendSDF(samplePoint));
   // samplePoint += v3offset;
 
-  res = unionSDF(res, cheapBendSDF(samplePoint));
+  // res = unionSDF(res, cheapBendSDF(samplePoint + vec3(0.,-3.7,0.)));
   samplePoint += v3offset;
   return res;
 }
@@ -333,27 +333,47 @@ vec3 phongContribForLight(vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 eye,
   return lightIntensity * (k_d * dotLN + k_s * pow(dotRV, alpha));
 }
 
-vec3 phongIllumination(vec3 k_a, vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 eye) {
-  const vec3 ambientLight = 0.5 * vec3(1.0, 1.0, 1.0);
-  vec3 color = ambientLight * k_a;
+float shadow( vec3 ro, vec3 rd, float mint, float maxt ) {
+  float res = 1.0;
+  float t = mint;
+  for( int i=0; i<16; i++ )
+  {
+  float h = sceneSDF( ro + rd*t) ;
+      res = min( res, 8.0*h/t );
+      t += clamp( h, 0.02, 0.10 );
+      if( h<0.001 || t>maxt ) break;
+  }
+  return clamp( res, 0.0, 1.0 );
+}
 
-  vec3 light1Pos = vec3(4.0 * sin(vGlobalTime),
-                        2.0,
-                        4.0 * cos(vGlobalTime));
-  vec3 light1Intensity = vec3(0.4, 0.4, 0.4);
+float calcAO( vec3 pos, vec3 nor ) {
+  float occ = 0.0;
+  float sca = 1.0;
+  for( int i=0; i<5; i++ ) {
+    float hr = 0.01 + 0.12*float(i)/4.0;
+    vec3 aopos =  nor * hr + pos;
+    float dd = sceneSDF( aopos );
+    occ += -(dd-hr)*sca;
+    sca *= 0.95;
+  }
+  return clamp( 1.0 - 3.0*occ, 0.0, 1.0 );
+}
 
-  color += phongContribForLight(k_d, k_s, alpha, p, eye,
-                                light1Pos,
-                                light1Intensity);
+vec3 illumination(vec3 eye, vec3 worldDir, float dist) {
+  vec3 color = vec3(0.6);
+  vec3 pos = eye + dist * worldDir;
+  vec3 nor = estimateNormal(pos);
+  color = nor;
 
-  vec3 light2Pos = vec3(2.0 * sin(0.37 * vGlobalTime),
-                        2.0 * cos(0.37 * vGlobalTime),
-                        2.0);
-  vec3 light2Intensity = vec3(0.4, 0.4, 0.4);
+  // shadows
+  vec3  lig = normalize( vec3(0., 1., 0.) );
+  float dif = clamp( dot( nor, lig ), 0.0, 1. );
+  dif *= shadow(pos, lig, .02, 2.5);
+  vec3 lin = vec3(0.0);
+  lin += 1.20*dif*vec3(1.00,0.85,0.55);
+  color = color*lin;
 
-  color += phongContribForLight(k_d, k_s, alpha, p, eye,
-                                light2Pos,
-                                light2Intensity);
+  color = pow( color, vec3(0.4545) );
   return color;
 }
 
@@ -376,36 +396,28 @@ mat4 viewMatrix(vec3 eye, vec3 center, vec3 up) {
   );
 }
 
-
-void main(void) {
-  vec3 viewDir = rayDirection(145.0, vScreenSize.xy, gl_FragCoord.xy);
-  // vec3 eye = vec3(8.0+vGlobalTime, 5.0 * sin(0.2 * vGlobalTime), 10.0 * sin(0.2 * vGlobalTime));
-  vec3 eye = vec3(10.0, 3.0 + sin(0.2 * vGlobalTime), -10.0 * sin(0.2 * vGlobalTime));
-
-  mat4 viewToWorld = viewMatrix(eye, vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
-  vec3 worldDir = (viewToWorld * vec4(viewDir, 0.0)).xyz;
-
+vec3 render(vec3 eye, vec3 worldDir) {
   float dist = shortestDistanceToSurface(eye, worldDir, MIN_DIST, MAX_DIST);
 
-  // could be an optimisation, but need to be tested
   if (dist > MAX_DIST - EPSILON) {
     // Didn't hit anything
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-    return;
+    return vec3(0.);
   }
 
-  vec3 p = eye + dist * worldDir;
+  vec3 color = illumination(eye, worldDir, dist);
 
-  vec3 K_a = (estimateNormal(p) + vec3(1.0)) / 2.0;
-  // vec3 K_a = (vec3(1.0)) / 2.0;
-  vec3 K_d = K_a;
-  vec3 K_s = vec3(.6, .6, .6);
-  // vec3 K_s = vec3(0.0, 0.0, 0.0);
-  float shininess = 10.0;
+  return color;
+}
 
-  vec3 color = phongIllumination(K_a, K_d, K_s, shininess, p, eye);
+void main(void) {
+  vec3 viewDir = rayDirection(140.0, vScreenSize.xy, gl_FragCoord.xy);
+  // vec3 eye = vec3(8.0+vGlobalTime, 5.0 * sin(0.2 * vGlobalTime), 10.0 * sin(0.2 * vGlobalTime));
+  vec3 eye = vec3(10.0*vGlobalTime, 10.0 * sin(vGlobalTime), 0.);
 
-  color = pow( color, vec3(0.8) );
+  mat4 viewToWorld = viewMatrix(eye, vec3(10.0, 100.0, 0.0), vec3(0., 1.0, 0.));
+  vec3 worldDir = (viewToWorld * vec4(viewDir, 0.0)).xyz;
+
+  vec3 color = render(eye, worldDir);
 
   gl_FragColor = vec4(color, 1.0);
   // gl_FragColor = vec4(dist, 0.0, 0.0, 1.0);
