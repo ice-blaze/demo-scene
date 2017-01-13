@@ -156,9 +156,12 @@ vec3 illumination(vec3 eye, vec3 worldDir, float dist) {
 	vec3 nor = estimateNormal(pixel_pos);
 	// vec3 ref = reflect( worldDir, nor );
 
-	// vec3 mount_top = vec3(0.,1.,0.);
-	// float snow = 1. - step(0.8 + 0.2 * sin(vGlobalTime),dot(mount_top, nor));
-	// color = mix(vec3(1.), color, snow);
+	vec3 mount_top = vec3(0.,1.,0.);
+	vec3 snow_color = vec3(1.);
+	float edge2 = 0.8 + 0.2 * sin(vGlobalTime);
+	float edge1 = edge2 - 0.3;
+	float snow = 1. - smoothstep(edge2, 1., dot(mount_top, nor));
+	color = mix(snow_color, color, snow);
 
 	vec3 lightPosition = vec3(10.,100.,0.);
 	vec3 surfaceToLight = lightPosition - pixel_pos;
@@ -210,7 +213,7 @@ void main(void) {
 	vec3 viewDir = rayDirection(140.0, vScreenSize.xy, gl_FragCoord.xy);
 	vec3 eye = vec3(1.*(-vGlobalTime), 5.8, 0.); // boxes
 	// SUN_DIRECTION = normalize(vec3(1.* cos(vGlobalTime),1.,1.* sin(vGlobalTime)));
-	SUN_DIRECTION = normalize(vec3(cos(vGlobalTime),max(sin(vGlobalTime),0.0),sin(vGlobalTime)));
+	// SUN_DIRECTION = normalize(vec3(cos(vGlobalTime),max(sin(vGlobalTime),0.0),sin(vGlobalTime)));
 	// SUN_DIRECTION = normalize(vec3(cos(vGlobalTime),0.0,sin(vGlobalTime)));
 	eye = vec3(-10.,2.+0.*sin(vGlobalTime),10.);
 	// eye = vec3(10.*sin(vGlobalTime/8.),0.,10.*cos(vGlobalTime/8.));
