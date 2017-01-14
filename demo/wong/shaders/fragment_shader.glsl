@@ -196,6 +196,11 @@ float opRep( vec3 p, vec2 b, vec3 c) {
   return torusSDF(q, b);
 }
 
+float boxRepSDF(vec3 p, vec3 size, vec3 repetition){
+  vec3 q = mod(p,repetition)-0.5*repetition;
+  return boxSDF(q, size);
+}
+
 float lengthPow(vec2 p, float power) {
   return pow(pow(p.x,power)+pow(p.y,power),1./power);
 }
@@ -242,6 +247,11 @@ float cheapBendSDF( vec3 p ) {
     return boxSDF(q, vec3(2., 3., 1.));
 }
 
+float sceneSDF2(vec3 samplePoint){
+  float res = 100000.;
+  return unionSDF(res, displaceSDF(samplePoint, vec2(4.,.5), vec3(7., 5., 20.)));
+}
+
 float sceneSDF(vec3 samplePoint) {
   // vec3 cubePoint = (rotateY(-vGlobalTime) * samplePoint).xyz;
   vec3 v3Unit = vec3(1., 1., 1.);
@@ -251,16 +261,15 @@ float sceneSDF(vec3 samplePoint) {
   // samplePoint = mod(samplePoint,c)-0.5*c;
   // res = unionSDF(res, twistSDF(samplePoint + vec3(0.,0.,10.)));
   // res = unionSDF(res, boxSDF(samplePoint-vec3(0.,-5.,0.), vec3(1000.,1.,1000.)));
-  // res = unionSDF(res, boxSDF(samplePoint, v3Unit));
-  // samplePoint += v3offset;
+  res = unionSDF(res, boxRepSDF(samplePoint+vec3(10.,5.,1.), v3Unit, vec3(10.,0.,10.)));
   // res = unionSDF(res, roundBoxSDF(samplePoint, v3Unit, .2));
   // samplePoint += v3offset;
   // res = unionSDF(res, torusSDF(samplePoint, vec2(1.,0.2)));
   // samplePoint += v3offset;
   // res = unionSDF(res, cylinderSDF(samplePoint, v3Unit));
   // res = unionSDF(res, coneSDF(samplePoint, vec2(0.1,0.01)));
-  // res = unionSDF(res, planeSDF(samplePoint, vec4(0.,1.,1.,0.)));
-  // res = unionSDF(res, planeSDF(samplePoint+vec3(30.0)));
+  // res = unionSDF(res, planeSDF(samplePoint, vec4(0.,1.,0.,0.)));
+  res = unionSDF(res, planeSDF(samplePoint+vec3(7.0)));
   // res = unionSDF(res, hexPrismSDF(samplePoint, vec2(1.,1.)));
   // samplePoint -= v3offset*3.;
   // samplePoint += vec3(0.,0.,8.);
@@ -278,7 +287,7 @@ float sceneSDF(vec3 samplePoint) {
   // res = unionSDF(res, squareTorusSDF( samplePoint, vec2(1.,.2), 8. ));
   // samplePoint += v3offset;
   // res = unionSDF(res, opRep(samplePoint, vec2(1.,2.), vec3(10., 5., 10.)));
-  res = unionSDF(res, displaceSDF(samplePoint, vec2(4.,.5), vec3(7., 5., 20.)));
+  // res = unionSDF(res, displaceSDF(samplePoint, vec2(4.,.5), vec3(7., 5., 20.)));
   // res = unionSDF(res, blendSDF(samplePoint));
   // samplePoint += v3offset;
 
@@ -310,29 +319,6 @@ vec3 estimateNormal(vec3 p) {
   ));
 }
 
-vec3 phongContribForLight(vec3 k_d, vec3 k_s, float alpha, vec3 p, vec3 eye,
-                          vec3 lightPos, vec3 lightIntensity) {
-  vec3 N = estimateNormal(p);
-  vec3 L = normalize(lightPos - p);
-  vec3 V = normalize(eye - p);
-  vec3 R = normalize(reflect(-L, N));
-
-  float dotLN = dot(L, N);
-  float dotRV = dot(R, V);
-
-  if (dotLN < 0.0) {
-    // Light not visible from this point on the surface
-    return vec3(0.0, 0.0, 0.0);
-  }
-
-  if (dotRV < 0.0) {
-    // Light reflection in opposite direction as viewer, apply only diffuse
-    // component
-    return lightIntensity * (k_d * dotLN);
-  }
-  return lightIntensity * (k_d * dotLN + k_s * pow(dotRV, alpha));
-}
-
 float shadow( vec3 ro, vec3 rd, float mint, float maxt ) {
   float res = 1.0;
   float t = mint;
@@ -346,7 +332,7 @@ float shadow( vec3 ro, vec3 rd, float mint, float maxt ) {
   return clamp( res, 0.0, 1.0 );
 }
 
-float calcAO( vec3 pos, vec3 nor ) {
+float calcAmbientOcclusion( vec3 pos, vec3 nor ) {
   float occ = 0.0;
   float sca = 1.0;
   for( int i=0; i<5; i++ ) {
@@ -363,17 +349,33 @@ vec3 illumination(vec3 eye, vec3 worldDir, float dist) {
   vec3 color = vec3(0.6);
   vec3 pos = eye + dist * worldDir;
   vec3 nor = estimateNormal(pos);
-  color = nor;
+  vec3 ref = reflect( worldDir, nor );
+  // color = nor;
+
+  // float occ = calcAmbientOcclusion( pos, nor );
+  float occ = 1.0;
+  vec3  lig = normalize( vec3(0., 1., 0.) );
+  float amb = clamp( 0.5+0.5*nor.y, 0.0, 1.0 );
+  float dif = clamp( dot( nor, lig ), 0.0, 1. );
+  float bac = clamp( dot( nor, normalize(vec3(-lig.x,0.0,-lig.z))), 0.0, 1.0 )*clamp( 1.0-pos.y,0.0,1.0);
+  float dom = smoothstep( -0.1, 0.1, ref.y );
+  float fre = pow( clamp(1.0+dot(nor,worldDir),0.0,1.0), 2.0 );
+  float spe = pow(clamp( dot( ref, lig ), 0.0, 1.0 ),16.0);
 
   // shadows
-  vec3  lig = normalize( vec3(0., 1., 0.) );
-  float dif = clamp( dot( nor, lig ), 0.0, 1. );
   dif *= shadow(pos, lig, .02, 2.5);
   vec3 lin = vec3(0.0);
   lin += 1.20*dif*vec3(1.00,0.85,0.55);
+  lin += 1.20*spe*vec3(1.00,0.85,0.55)*dif;
+  lin += 0.20*amb*vec3(0.50,0.70,1.00)*occ;
+  lin += 0.30*dom*vec3(0.50,0.70,1.00)*occ;
+  lin += 0.30*bac*vec3(0.25,0.25,0.25)*occ;
+  lin += 0.40*fre*vec3(1.00,1.00,1.00)*occ;
   color = color*lin;
 
+
   color = pow( color, vec3(0.4545) );
+  color *= 10./dist;
   return color;
 }
 
@@ -412,9 +414,11 @@ vec3 render(vec3 eye, vec3 worldDir) {
 void main(void) {
   vec3 viewDir = rayDirection(140.0, vScreenSize.xy, gl_FragCoord.xy);
   // vec3 eye = vec3(8.0+vGlobalTime, 5.0 * sin(0.2 * vGlobalTime), 10.0 * sin(0.2 * vGlobalTime));
-  vec3 eye = vec3(10.0*vGlobalTime, 10.0 * sin(vGlobalTime), 0.);
+  // vec3 eye = vec3(10.0*vGlobalTime, 10.0 * sin(vGlobalTime), 0.); // torus displacement
+  vec3 eye = vec3(5.0*vGlobalTime, max(-6.8, 10.0 * sin(vGlobalTime)), 0.); // boxes
+  // vec3 eye = vec3(1.0, 0.0, 0.);
 
-  mat4 viewToWorld = viewMatrix(eye, vec3(10.0, 100.0, 0.0), vec3(0., 1.0, 0.));
+  mat4 viewToWorld = viewMatrix(eye, vec3(0.0, 0.0, 0.0), vec3(0., 1.0, 0.));
   vec3 worldDir = (viewToWorld * vec4(viewDir, 0.0)).xyz;
 
   vec3 color = render(eye, worldDir);
