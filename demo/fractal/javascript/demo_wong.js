@@ -1,3 +1,12 @@
+const is_mouse_right = function(e){
+	e = e || window.event;
+
+	if ("which" in e)  // Gecko (Firefox), WebKit (Safari/Chrome) & Opera
+		return e.which == 3;
+	else if ("button" in e)  // IE, Opera
+		return e.button == 2;
+}
+
 const main=function() {
 	const CANVAS=document.getElementById("demo_canvas")
 	const COUNTER=document.getElementById("counter")
@@ -55,21 +64,59 @@ const main=function() {
 	var uni_min_re = GL.getUniformLocation(SHADER_PROGRAM, "min_re")
 	var uni_max_re = GL.getUniformLocation(SHADER_PROGRAM, "max_re")
 	var uni_min_im = GL.getUniformLocation(SHADER_PROGRAM, "min_im")
+	var uni_max_im = GL.getUniformLocation(SHADER_PROGRAM, "max_im")
 
 	var min_re = -2.0;
-	var max_re = 1.5;
+	var max_re =  1.0;
 	var min_im = -1.2;
+	var max_im =  1.0;
 
 	GL.enableVertexAttribArray(coord)
+
+	function zoom_window_size(xpercent, ypercent){
+		let re_diff = Math.abs(max_re - min_re)/4
+		let im_diff = Math.abs(max_im - min_im)/4
+		max_re -= re_diff * (1.0 - xpercent);
+		min_re += re_diff * xpercent;
+		max_im -= im_diff * (1.0 - ypercent);
+		min_im += im_diff * ypercent;
+	}
+	function unzoom_window_size(xpercent, ypercent){
+		let re_diff = Math.abs(max_re - min_re)/4
+		let im_diff = Math.abs(max_im - min_im)/4
+		max_re += re_diff * xpercent;
+		min_re -= re_diff * (1.0 - xpercent);
+		max_im += im_diff * ypercent;
+		min_im -= im_diff * (1.0 - ypercent);
+	}
+
+	function on_click(event)
+	{
+		let isRightMB = is_mouse_right(event)
+
+		let x = event.x + 1;
+		let y = event.y + 1;
+
+		x -= CANVAS.offsetLeft;
+		y -= CANVAS.offsetTop;
+
+		xpercent = x/CANVAS.width;
+		ypercent = y/CANVAS.height;
+
+		if( is_mouse_right(event) ){
+			unzoom_window_size(xpercent, ypercent)
+		} else {
+			zoom_window_size(xpercent, ypercent)
+		}
+	}
+	CANVAS.addEventListener("mousedown", on_click, false);
 
 	let time_old=0
 	const counter_list = []
 	let last_mean = 0
+
 	// main loop
 	const animate=function(time) {
-		// min_re /= 1.01;
-		// max_re /= 1.01;
-		// min_im /= 1.01;
 		let dt=time-time_old
 		counter_list.push(dt)
 		floor_time = Math.floor(time/1000)
@@ -90,6 +137,7 @@ const main=function() {
 		GL.uniform1f(uni_min_re, min_re)
 		GL.uniform1f(uni_max_re, max_re)
 		GL.uniform1f(uni_min_im, min_im)
+		GL.uniform1f(uni_max_im, max_im)
 
 		GL.bindBuffer(GL.ARRAY_BUFFER, vertex_buffer)
 		GL.vertexAttribPointer(coord, 3, GL.FLOAT, false, 0, 0)

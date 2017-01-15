@@ -5,11 +5,11 @@ varying float vGlobalTime;
 uniform float min_re;
 uniform float max_re;
 uniform float min_im;
+uniform float max_im;
 
-const float max_iterations = 1650.0;
+const float max_iterations = 16050.0;
 
 void main(void) {
-	float max_im = min_im+(max_re-min_re)*vScreenSize.y/vScreenSize.x;
 	float re_factor = (max_re-min_re)/(vScreenSize.x-1.);
 	float im_factor = (max_im-min_im)/(vScreenSize.y-1.);
 	float c_im = max_im - gl_FragCoord.y*im_factor;
