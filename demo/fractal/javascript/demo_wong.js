@@ -66,28 +66,28 @@ const main=function() {
 	var uni_min_im = GL.getUniformLocation(SHADER_PROGRAM, "min_im")
 	var uni_max_im = GL.getUniformLocation(SHADER_PROGRAM, "max_im")
 
-	var min_re = -2.0;
-	var max_re =  1.0;
-	var min_im = -1.2;
-	var max_im =  1.0;
+	var min_re = new Fraction( -2, 1);
+	var max_re = new Fraction( 1, 1);
+	var min_im = new Fraction(-12, 10);
+	var max_im = new Fraction( 1, 1);
 
 	GL.enableVertexAttribArray(coord)
 
 	function zoom_window_size(xpercent, ypercent){
-		let re_diff = Math.abs(max_re - min_re)/4
-		let im_diff = Math.abs(max_im - min_im)/4
-		max_re -= re_diff * (1.0 - xpercent);
-		min_re += re_diff * xpercent;
-		max_im -= im_diff * (1.0 - ypercent);
-		min_im += im_diff * ypercent;
+		let re_diff = max_re.minus(min_re).abs().dividedBy(new Fraction(4, 1))
+		let im_diff = max_im.minus(min_im).abs().dividedBy(new Fraction(4, 1))
+		max_re = max_re.minus(re_diff.times(new Fraction(1, 1).minus(xpercent)));
+		min_re = min_re.plus(re_diff.times(xpercent));
+		max_im = max_im.minus(im_diff.times(new Fraction(1, 1).minus(ypercent)));
+		min_im = min_im.plus(im_diff.times(ypercent));
 	}
 	function unzoom_window_size(xpercent, ypercent){
-		let re_diff = Math.abs(max_re - min_re)/4
-		let im_diff = Math.abs(max_im - min_im)/4
-		max_re += re_diff * xpercent;
-		min_re -= re_diff * (1.0 - xpercent);
-		max_im += im_diff * ypercent;
-		min_im -= im_diff * (1.0 - ypercent);
+		let re_diff = max_re.minus(min_re).abs().dividedBy(new Fraction(4, 1))
+		let im_diff = max_im.minus(min_im).abs().dividedBy(new Fraction(4, 1))
+		max_re = max_re.plus(re_diff.times(xpercent));
+		min_re = min_re.minus(re_diff.times(new Fraction(1, 1).minus(xpercent)));
+		max_im = max_im.plus(im_diff.times(ypercent));
+		min_im = min_im.minus(im_diff.times(new Fraction(1, 1).minus(ypercent)));
 	}
 
 	function on_click(event)
@@ -100,14 +100,17 @@ const main=function() {
 		x -= CANVAS.offsetLeft;
 		y -= CANVAS.offsetTop;
 
-		xpercent = x/CANVAS.width;
-		ypercent = y/CANVAS.height;
+		xpercent = new Fraction(x, CANVAS.width);
+		ypercent = new Fraction(y, CANVAS.height);
+
+		console.log(min_re.num + ' ' + min_re.denom + ' ' + min_re.num / min_re.denom );
 
 		if( is_mouse_right(event) ){
 			unzoom_window_size(xpercent, ypercent)
 		} else {
 			zoom_window_size(xpercent, ypercent)
 		}
+		console.log(min_re.num + ' ' + min_re.denom + ' ' + min_re.num / min_re.denom );
 	}
 	CANVAS.addEventListener("mousedown", on_click, false);
 
@@ -134,10 +137,10 @@ const main=function() {
 		GL.uniform2f(screen_size_in, CANVAS.width, CANVAS.height)
 		GL.uniform1f(global_time, time/1000)
 
-		GL.uniform1f(uni_min_re, min_re)
-		GL.uniform1f(uni_max_re, max_re)
-		GL.uniform1f(uni_min_im, min_im)
-		GL.uniform1f(uni_max_im, max_im)
+		GL.uniform2i(uni_min_re, min_re.num, min_re.denom)
+		GL.uniform2i(uni_max_re, max_re.num, max_re.denom)
+		GL.uniform2i(uni_min_im, min_im.num, min_im.denom)
+		GL.uniform2i(uni_max_im, max_im.num, max_im.denom)
 
 		GL.bindBuffer(GL.ARRAY_BUFFER, vertex_buffer)
 		GL.vertexAttribPointer(coord, 3, GL.FLOAT, false, 0, 0)
@@ -151,3 +154,10 @@ const main=function() {
 	}
 	animate(0)
 }
+
+a = new Fraction(3, 10)
+b = new Fraction(2, 1)
+console.log(b.num + ' ' + b.denom);
+c = a.times(b)
+console.log(c.num + ' ' + c.denom);
+console.log(b.greaterThan(a));
