@@ -7,13 +7,13 @@
 		<style media="screen">
 			body {
 				background: black;
+				color: white;
 			}
 			.counter_label {
 				padding: 0.5em;
 				background-color: rgba(0,0,0,0.65);
 				display:block;
 				position:fixed;
-				color: white;
 				font-family: "Lucida Console", Monaco, monospace;
 			}
 			#canvas-container {
@@ -29,11 +29,13 @@
 	</head>
 	<body style='margin:0px' onload='main();small_res();'>
 		<div id="canvas-container">
-			<canvas id='demo_canvas'></canvas>
+			<canvas id='demo_canvas' oncontextmenu='return false;'></canvas>
 			<br>
 			<button id="btn_small">Small</button>
 			<button id="btn_medium">Medium</button>
 			<button id="btn_fullscreen">Full Screen</button>
+			<br>
+			🛈 Left click zoom, right click unzoom.
 		</div>
 		<div class="counter_label">
 			<div class="content">
