@@ -1,3 +1,5 @@
+var canvas_play = false
+
 const main=function() {
   const CANVAS=document.getElementById("demo_canvas")
   const COUNTER=document.getElementById("counter")
@@ -58,6 +60,11 @@ const main=function() {
   const counter_list = []
   let last_mean = 0
   const animate=function(time) {
+    window.requestAnimationFrame(animate)
+    if(!canvas_play && last_mean!=0){
+      return
+    }
+
     let dt=time-time_old
     counter_list.push(dt)
     floor_time = Math.floor(time/1000)
@@ -82,8 +89,6 @@ const main=function() {
     GL.drawElements(GL.TRIANGLES, indices.length, GL.UNSIGNED_SHORT,0)
 
     GL.flush()
-
-    window.requestAnimationFrame(animate)
   }
   animate(0)
 }

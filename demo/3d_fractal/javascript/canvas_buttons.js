@@ -5,6 +5,11 @@ min_height = 240;
 med_width  = 640;
 med_height = 480;
 
+function play(){
+	canvas_play = !canvas_play
+}
+document.getElementById("btn_play").onclick = play
+
 function small_res(){
 	demo_canvas.width  = min_width
 	demo_canvas.height = min_height
