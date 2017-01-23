@@ -4,78 +4,19 @@ varying float vGlobalTime;
 
 const int MAX_MARCHING_STEPS = 6000; // can't go higher because of android
 const float MIN_DIST = 0.0;
-const float MAX_DIST = 255.0;
+const float MAX_DIST = 455.0;
 const float EPSILON = 0.0001;
-const int NUM_OCTAVES = 6;
 
 const vec3 SKY_YELLOWISH = vec3(1.0,0.9,0.7);
-const vec3 SKY_BLUISH = vec3(0.5,0.6,0.7);
+const vec3 SKY_BLUISH = vec3(1.,1.,1.);
 vec3 SUN_DIRECTION = normalize(vec3(1.,1.,0.));
-
 
 float unionSDF(float distA, float distB) {
 	return min(distA, distB);
 }
 
-float rand(vec2 n) {
-	return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453);
-}
-
-float noise(vec2 n) {
-	n /= 5.;
-	const vec2 d = vec2(0.0, 1.0);
-	vec2 b = floor(n), f = smoothstep(vec2(0.0), vec2(1.0), fract(n));
-	return mix(mix(rand(b), rand(b + d.yx), f.x), mix(rand(b + d.xy), rand(b + d.yy), f.x), f.y);
-}
-
-float fbm(vec2 x) {
-	float v = 0.0;
-	float a = 4.5;
-	vec2 shift = vec2(100);
-	// Rotate to reduce axial bias
-	float stretch = 1.0;
-	mat2 rot = mat2(
-		 cos(0.5)*stretch,
-		 sin(0.5)*stretch,
-		-sin(0.5)*stretch,
-		 cos(0.50)*stretch)
-	;
-	for (int i = 0; i < NUM_OCTAVES; ++i) {
-		v += a * noise(x);
-		x = rot * x * 1.8 + shift;
-		a *= 0.5;
-	}
-	return v;
-}
-
-const int Iterations = 12;
-const float Scale = 3.0;
-const float FoldingLimit = 100.0;
-float MandleBox(vec3 pos)
-{
-	float MinRad2 = 0.15 + abs(sin(vGlobalTime*.25))*.75;
-	vec4 scale = vec4(Scale, Scale, Scale, abs(Scale)) / MinRad2;
-	float AbsScalem1 = abs(Scale - 1.0);
-	float AbsScaleRaisedTo1mIters = pow(abs(Scale), float(1-Iterations));
-   vec4 p = vec4(pos,1.0), p0 = p;  // p.w is the distance estimate
-
-   for (int i=0; i<Iterations; i++)
-   {
-      p.xyz = clamp(p.xyz, -1.0, 1.0) * 2.0 - p.xyz;
-      float r2 = dot(p.xyz, p.xyz);
-      p *= clamp(max(MinRad2/r2, MinRad2), 0.0, 1.0);
-      p = p*scale + p0;
-      if (r2>FoldingLimit) break;
-   }
-   return ((length(p.xyz) - AbsScalem1) / p.w - AbsScaleRaisedTo1mIters);
-}
-
-float plane( vec3 p ) {
-	return p.y+fbm(vec2(p.x, p.z));
-}
-
-float terrain( vec3 p ) {
-	return p.y+fbm(vec2(p.x, p.z));
+float plane( vec3 p, float h) {
+	return p.y - h;
 }
 
 float boxSDF( vec3 p, vec3 b, float r )
@@ -83,10 +24,29 @@ float boxSDF( vec3 p, vec3 b, float r )
   return length(max(abs(p)-b,0.0))-r;
 }
 
-float sceneSDF(vec3 samplePoint) {
-	if (samplePoint.y > 1.0) return 10000.0;
-	return MandleBox(samplePoint);
-	// return  unionSDF(terrain(samplePoint), boxSDF(samplePoint/vec3(3.,.2,1.), vec3(2.), 0.3));
+const int iters = 12;
+const float SCALE = 3.;
+float sceneSDF(vec3 position) {
+	float MR2 =  0.15 + abs(sin(vGlobalTime*.25))*.75;//.5*.5;
+	// only display one 'cube'
+	if (
+		// position.z > 1.0 || position.z < -1.0 ||
+		position.y > 1.0 || position.y < -1.0
+	) return 10000.0;
+
+	//mandlebox
+	vec4 scalevec = vec4(SCALE, SCALE, SCALE, abs(SCALE)) / MR2;
+	float C1 = abs(SCALE-1.0), C2 = pow(abs(SCALE), float(1-iters));
+
+	// distance estimate
+	vec4 p = vec4(position.xyz, 1.0), p0 = vec4(position.xyz, 1.0);  // p.w is knighty's DEfactor
+	for (int i=0; i<iters; i++) {
+		p.xyz = clamp(p.xyz, -1.0, 1.0) * 2.0 - p.xyz;  // box fold: min3, max3, mad3
+		float r2 = dot(p.xyz, p.xyz);  // dp3
+		p.xyzw *= clamp(max(MR2/r2, MR2), 0.0, 1.0);  // sphere fold: div1, max1.sat, mul4
+		p.xyzw = p*scalevec + p0;  // mad4
+	}
+	return (length(p.xyz) - C1) / p.w - C2;
 }
 
 float shortestDistanceToSurface(vec3 eye, vec3 marchingDirection, float start, float end) {
@@ -144,16 +104,11 @@ vec3 applyFog(
 	const vec3 rayOri,
 	const vec3 rayDir
 ){
-	float distance_fog_value = .018;
-	float distance_fog = 1.0 - exp( -distance*distance_fog_value );
+	float distance_fog_value = .118;
+	float fogAmount = 1.0 - exp( -distance*distance_fog_value );
 
 	float b = .45;
 	float c = .015;
-	float height_fog = c * exp(-rayOri.y*b) * (1.0-exp( -distance*rayDir.y*b ))/rayDir.y;
-	height_fog = min(1., height_fog); //height can be higher than 1 and it creates artefacts
-
-	// want to merge two types of fog (distance or height)
-	float fogAmount = max(distance_fog, height_fog);
 
 	//create a sun effect, yellow when in the sun direction, blueish otherwise
 	float sunAmount = max( dot( rayDir, SUN_DIRECTION ), 0.0 );
@@ -166,19 +121,21 @@ vec3 applyFog(
 }
 
 vec3 illumination(vec3 eye, vec3 worldDir, float dist) {
-	vec3 color = vec3(.63,.45, .3);
+	vec3 color = vec3(1.,.8, .0);
 
 	vec3 pixel_pos = eye + dist * worldDir;
 	vec3 nor = estimateNormal(pixel_pos);
-	// vec3 ref = reflect( worldDir, nor );
+	vec3 ref = reflect( worldDir, nor );
 
 	vec3 lightPosition = vec3(10.,100.,0.);
 	vec3 surfaceToLight = lightPosition - pixel_pos;
 	float brightness = dot(nor, SUN_DIRECTION) / (length(SUN_DIRECTION) * length(nor));
-	// brightness = clamp(brightness, 0., 1.);
+	brightness = clamp(brightness, 0., 1.);
 	brightness *= shadow(pixel_pos, SUN_DIRECTION, 0.01, 40.);
 	// brightness = 0.;
+	float ao = calcAmbientOcclusion(pixel_pos, nor);
 	color *= brightness;
+	color *= ao;
 	color = applyFog(color, dist, eye, worldDir);
 	return color;
 }
@@ -210,6 +167,7 @@ vec3 render(vec3 eye, vec3 worldDir) {
 
 	if (dist > MAX_DIST - EPSILON) {
 		// Didn't hit anything
+		// return SKY_BLUISH;
 		return applyFog(sky_color, dist, eye, worldDir);
 	}
 
@@ -218,19 +176,40 @@ vec3 render(vec3 eye, vec3 worldDir) {
 	return color;
 }
 
-void main(void) {
-	vec3 viewDir = rayDirection(140.0, vScreenSize.xy, gl_FragCoord.xy);
-	vec3 eye = vec3(1.*(-vGlobalTime), 5.8, 0.); // boxes
-	// SUN_DIRECTION = normalize(vec3(1.* cos(vGlobalTime),1.,1.* sin(vGlobalTime)));
-	// SUN_DIRECTION = normalize(vec3(cos(vGlobalTime),max(sin(vGlobalTime),0.0),sin(vGlobalTime)));
-	// SUN_DIRECTION = normalize(vec3(cos(vGlobalTime),0.0,sin(vGlobalTime)));
-	eye = vec3(2.,1.,2.);
-	// eye = vec3(5.*sin(vGlobalTime/8.),0.,5.*cos(vGlobalTime/8.));
-
+vec3 generate_color(vec3 eye, vec3 viewDir){
 	mat4 viewToWorld = viewMatrix(eye, vec3(0.0, 0.0, 0.0), vec3(0., 1.0, 0.));
 	vec3 worldDir = (viewToWorld * vec4(viewDir, 0.0)).xyz;
+	return render(eye, worldDir);
+}
 
+const float BLUR_STEP = .015;
+void main(void) {
+	vec3 viewDir = rayDirection(140.0, vScreenSize.xy, gl_FragCoord.xy);
+	vec3 eye = vec3(4.2,.5+.5*sin((vGlobalTime-BLUR_STEP)/8.),2. * sin((vGlobalTime-BLUR_STEP*2.)/8.));
+	mat4 viewToWorld = viewMatrix(eye, vec3(0.0, 0.0, 0.0), vec3(0., 1.0, 0.));
+	vec3 worldDir = (viewToWorld * vec4(viewDir, 0.0)).xyz;
 	vec3 color = render(eye, worldDir);
+
+	// The naive way of doing blur, but very performance consuming
+	// One optimization is to keep the old color frames and only recalculate
+	// the future color
+	// Another way but only filming is to wait x frames befor rendering and
+	// then blur
+	// vec3 eye;
+	// vec3 color;
+	// eye = vec3(4.2,.5+.5*sin((vGlobalTime-BLUR_STEP)/8.),2. * sin((vGlobalTime-BLUR_STEP*2.)/8.));
+	// color = generate_color(eye, viewDir);
+	// eye = vec3(4.2,.5+.5*sin((vGlobalTime-BLUR_STEP)/8.),2. * sin((vGlobalTime-BLUR_STEP)/8.));
+	// color = mix(color, generate_color(eye, viewDir), 0.5);
+	// eye = vec3(4.2,.5+.5*sin(vGlobalTime/8.),2. * sin(vGlobalTime/8.));
+	// color = mix(color, generate_color(eye, viewDir), 0.5);
+	// eye = vec3(4.2,.5+.5*sin((vGlobalTime+BLUR_STEP)/8.),2. * sin((vGlobalTime+BLUR_STEP)/8.));
+	// color = mix(color, generate_color(eye, viewDir), 0.5);
+	// eye = vec3(4.2,.5+.5*sin((vGlobalTime+BLUR_STEP)/8.),2. * sin((vGlobalTime+BLUR_STEP*2.)/8.));
+	// color = mix(color, generate_color(eye, viewDir), 0.5);
+
+	// vec3 eye = vec3(1.*(-vGlobalTime), 5.8, 0.); // boxes
+	// SUN_DIRECTION = normalize(vec3(1.* cos(vGlobalTime),1.,1.* sin(vGlobalTime)));
 
 	gl_FragColor = vec4(color, 1.0);
 }
