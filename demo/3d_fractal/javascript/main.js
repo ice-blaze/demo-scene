@@ -1,4 +1,6 @@
 var canvas_play = false
+var animate = undefined
+var first_loop = 0
 
 const main=function() {
   const CANVAS=document.getElementById("demo_canvas")
@@ -57,11 +59,13 @@ const main=function() {
   GL.enableVertexAttribArray(coord)
 
   let time_old=0
-  const counter_list = []
+  let counter_list = []
   let last_mean = 0
-  const animate=function(time) {
+
+  animate=function(time) {
     window.requestAnimationFrame(animate)
-    if(!canvas_play && last_mean!=0){
+    if(!canvas_play && first_loop>1){ //need to do two times the loop for an image
+      COUNTER.innerHTML = 0
       return
     }
 
@@ -89,6 +93,8 @@ const main=function() {
     GL.drawElements(GL.TRIANGLES, indices.length, GL.UNSIGNED_SHORT,0)
 
     GL.flush()
+
+    first_loop++;
   }
   animate(0)
 }

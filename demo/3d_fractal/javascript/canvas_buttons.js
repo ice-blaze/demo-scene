@@ -10,16 +10,22 @@ function play(){
 }
 document.getElementById("btn_play").onclick = play
 
+function refresh_image(){
+	first_loop = 0
+	window.requestAnimationFrame(animate)
+}
+
 function small_res(){
 	demo_canvas.width  = min_width
 	demo_canvas.height = min_height
+	refresh_image()
 }
 document.getElementById("btn_small").onclick = small_res
 
 function medium_res() {
 	demo_canvas.width  = med_width
 	demo_canvas.height = med_height
-	console.log(demo_canvas.fullscreenEnabled)
+	refresh_image()
 }
 document.getElementById("btn_medium").onclick = medium_res
 
@@ -31,6 +37,7 @@ document.getElementById("btn_fullscreen").onclick = function(){
 	} else {
 		demo_canvas.webkitRequestFullScreen(Element.ALLOW_KEYBOARD_INPUT);
 	}
+	refresh_image()
 }
 
 function onFullScreenChange(){
