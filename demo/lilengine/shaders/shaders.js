@@ -9,4 +9,3 @@ function loadTextFile(url) {
 
 const shader_fragment_source = loadTextFile("shaders/fragment_shader.glsl");
 const shader_vertex_source = loadTextFile("shaders/vertex_shader.glsl");
-const merge_fs_source = loadTextFile("shaders/merge_fs.glsl");

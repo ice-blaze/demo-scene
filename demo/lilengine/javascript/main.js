@@ -17,7 +17,7 @@ const main=function() {
   }
 
   const vertices = [
-    -1.0,-1.0, 0.0,
+    -.4,-.4, 0.0,
      1.0, 1.0, 0.0,
     -1.0, 1.0, 0.0,
      1.0,-1.0, 0.0,
@@ -65,16 +65,10 @@ const main=function() {
 
   const shader_vertex=get_shader(shader_vertex_source, GL.VERTEX_SHADER, "VERTEX")
   const shader_fragment=get_shader(shader_fragment_source, GL.FRAGMENT_SHADER, "FRAGMENT")
-  const merge_fs=get_shader(merge_fs_source, GL.FRAGMENT_SHADER, "FRAGMENT")
   const MANDELBOX_PROGRAM=GL.createProgram()
   GL.attachShader(MANDELBOX_PROGRAM, shader_vertex)
   GL.attachShader(MANDELBOX_PROGRAM, shader_fragment)
   GL.linkProgram(MANDELBOX_PROGRAM)
-
-  const MERGE_PROGRAM=GL.createProgram()
-  GL.attachShader(MERGE_PROGRAM, shader_vertex)
-  GL.attachShader(MERGE_PROGRAM, merge_fs)
-  GL.linkProgram(MERGE_PROGRAM)
 
   let bufftex = create_framebuffer(CANVAS.width, CANVAS.height)
 
@@ -128,50 +122,11 @@ const main=function() {
       GL.flush()
     }
 
-    const draw_square = function(){
-      // Pass the screen size to the shaders as uniform and quad coordinates as attribute
-      coord = GL.getAttribLocation(MERGE_PROGRAM, "coordinates")
-      GL.enableVertexAttribArray(coord)
-
-      GL.viewport(0.0, 0.0, CANVAS.width, CANVAS.height)
-      GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT)
-
-      screen_size_in = GL.getUniformLocation(MERGE_PROGRAM, "screen_size_in")
-      GL.uniform2f(screen_size_in, CANVAS.width, CANVAS.height)
-
-      // GL.activeTexture(GL.TEXTURE0); // don't know, maybe optimize textures binding
-      GL.bindTexture(GL.TEXTURE_2D, bufftex.texture);
-      let image = GL.getUniformLocation(MERGE_PROGRAM, "image1")
-      GL.uniform1i(image, 0);
-
-      // GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, 1, 1, 0, GL.RGBA, GL.UNSIGNED_BYTE,
-      //           new Uint8Array([0, 255, 255, 255]));
-      GL.bindBuffer(GL.ARRAY_BUFFER, vertex_buffer)
-      GL.vertexAttribPointer(coord, 3, GL.FLOAT, false, 0, 0)
-      GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, index_buffer)
-
-      GL.drawElements(GL.TRIANGLES, indices.length, GL.UNSIGNED_SHORT,0)
-
-      GL.flush()
-    }
-
     GL.useProgram(MANDELBOX_PROGRAM)
-
-    // console.log(CANVAS.width + " " + buffer.width)
-    if(CANVAS.width != bufftex.buffer.width){
-    //   console.log('asdasd')
-      bufftex = create_framebuffer(CANVAS.width, CANVAS.height)
-    }
-
-    GL.bindFramebuffer(GL.FRAMEBUFFER, bufftex.buffer)
-
-    draw_mandlebox()
 
     GL.bindFramebuffer(GL.FRAMEBUFFER, null)
 
-    GL.useProgram(MERGE_PROGRAM)
-
-    draw_square()
+    draw_mandlebox()
 
     first_loop++;
   }

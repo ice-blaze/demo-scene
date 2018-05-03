@@ -1,6 +1,7 @@
 precision highp float;
-varying vec2 vScreenSize;
-varying float vGlobalTime;
+
+uniform float global_time_in;
+uniform vec2 screen_size_in;
 
 const int MAX_MARCHING_STEPS = 6000; // can't go higher because of android
 const float MIN_DIST = 0.0;
@@ -27,7 +28,7 @@ float boxSDF( vec3 p, vec3 b, float r )
 const int iters = 12;
 const float SCALE = 3.;
 float sceneSDF(vec3 position) {
-	float MR2 =  0.15 + abs(sin(vGlobalTime*.25))*.75;//.5*.5;
+	float MR2 =  0.15 + abs(sin(global_time_in*.25))*.75;//.5*.5;
 	// only display one 'cube'
 	if (
 		// position.z > 1.0 || position.z < -1.0 ||
@@ -85,11 +86,12 @@ float shadow( vec3 ro, vec3 rd, float mint, float maxt ) {
 	return clamp( res, 0.0, 1.0 );
 }
 
+const float MAX_OCC_ITER = 4.0;
 float calcAmbientOcclusion( vec3 pos, vec3 nor ) {
 	float occ = 0.0;
 	float sca = 1.0;
-	for( int i=0; i<5; i++ ) {
-		float hr = 0.01 + 0.12*float(i)/4.0;
+	for( int i=0; i<=int(MAX_OCC_ITER); i++ ) {
+		float hr = 0.01 + 0.12*float(i)/MAX_OCC_ITER;
 		vec3 aopos =  nor * hr + pos;
 		float dd = sceneSDF( aopos );
 		occ += -(dd-hr)*sca;
@@ -159,8 +161,8 @@ mat4 viewMatrix(vec3 eye, vec3 center, vec3 up) {
 	);
 }
 
-vec3 render(vec3 eye, vec3 worldDir) {
-	float dist = shortestDistanceToSurface(eye, worldDir, MIN_DIST, MAX_DIST);
+vec3 render(vec3 eye, vec3 worldDir, out float dist) {
+	dist = shortestDistanceToSurface(eye, worldDir, MIN_DIST, MAX_DIST);
 	// vec3 sky_color = vec3(0.6, 0.8, 0.9);
 	vec3 sky_color = vec3(0.5,0.6,0.7);
 	// sky_color = vec3(1.);
@@ -172,44 +174,47 @@ vec3 render(vec3 eye, vec3 worldDir) {
 	}
 
 	vec3 color = illumination(eye, worldDir, dist);
-	// color =  applyFog(color, dist, eye, worldDir);
+	color =  applyFog(color, dist, eye, worldDir);
 	return color;
 }
 
 vec3 generate_color(vec3 eye, vec3 viewDir){
 	mat4 viewToWorld = viewMatrix(eye, vec3(0.0, 0.0, 0.0), vec3(0., 1.0, 0.));
 	vec3 worldDir = (viewToWorld * vec4(viewDir, 0.0)).xyz;
-	return render(eye, worldDir);
+	float test = 0.;
+	return render(eye, worldDir, test);
 }
 
 const float BLUR_STEP = .015;
 void main(void) {
-	vec3 viewDir = rayDirection(140.0, vScreenSize.xy, gl_FragCoord.xy);
-	vec3 eye = vec3(4.2,.5+.5*sin((vGlobalTime-BLUR_STEP)/8.),2. * sin((vGlobalTime-BLUR_STEP*2.)/8.));
-	mat4 viewToWorld = viewMatrix(eye, vec3(0.0, 0.0, 0.0), vec3(0., 1.0, 0.));
+	vec3 viewDir = rayDirection(140.0, screen_size_in.xy, gl_FragCoord.xy);
+	vec3 eye = vec3(.87,.85,2.);
+	// vec3 eye = vec3(4.2,.5+.5*sin((global_time_in-BLUR_STEP)/1.),2. * sin((global_time_in-BLUR_STEP*2.)/1.));
+	mat4 viewToWorld = viewMatrix(eye, vec3(0.0, 1.0, 2.0), vec3(0., 1.0, 0.));
 	vec3 worldDir = (viewToWorld * vec4(viewDir, 0.0)).xyz;
-	vec3 color = render(eye, worldDir);
+	float dist = 0.;
+	vec3 color = render(eye, worldDir, dist);
 
-	// The naive way of doing blur, but very performance consuming
-	// One optimization is to keep the old color frames and only recalculate
-	// the future color
-	// Another way but only filming is to wait x frames befor rendering and
-	// then blur
+	// // The naive way of doing blur, but very performance consuming
+	// // One optimization is to keep the old color frames and only recalculate
+	// // the future color
+	// // Another way but only filming is to wait x frames befor rendering and
+	// // then blur
 	// vec3 eye;
 	// vec3 color;
-	// eye = vec3(4.2,.5+.5*sin((vGlobalTime-BLUR_STEP)/8.),2. * sin((vGlobalTime-BLUR_STEP*2.)/8.));
-	// color = generate_color(eye, viewDir);
-	// eye = vec3(4.2,.5+.5*sin((vGlobalTime-BLUR_STEP)/8.),2. * sin((vGlobalTime-BLUR_STEP)/8.));
+	// // eye = vec3(4.2,.5+.5*sin((global_time_in-BLUR_STEP)/8.),2. * sin((global_time_in-BLUR_STEP*2.)/8.));
+	// // color = generate_color(eye, viewDir);
+	// eye = vec3(4.2,.5+.5*sin((global_time_in-BLUR_STEP)/8.),2. * sin((global_time_in-BLUR_STEP)/8.));
 	// color = mix(color, generate_color(eye, viewDir), 0.5);
-	// eye = vec3(4.2,.5+.5*sin(vGlobalTime/8.),2. * sin(vGlobalTime/8.));
+	// eye = vec3(4.2,.5+.5*sin(global_time_in/8.),2. * sin(global_time_in/8.));
 	// color = mix(color, generate_color(eye, viewDir), 0.5);
-	// eye = vec3(4.2,.5+.5*sin((vGlobalTime+BLUR_STEP)/8.),2. * sin((vGlobalTime+BLUR_STEP)/8.));
+	// eye = vec3(4.2,.5+.5*sin((global_time_in+BLUR_STEP)/8.),2. * sin((global_time_in+BLUR_STEP)/8.));
 	// color = mix(color, generate_color(eye, viewDir), 0.5);
-	// eye = vec3(4.2,.5+.5*sin((vGlobalTime+BLUR_STEP)/8.),2. * sin((vGlobalTime+BLUR_STEP*2.)/8.));
-	// color = mix(color, generate_color(eye, viewDir), 0.5);
+	// // eye = vec3(4.2,.5+.5*sin((global_time_in+BLUR_STEP)/8.),2. * sin((global_time_in+BLUR_STEP*2.)/8.));
+	// // color = mix(color, generate_color(eye, viewDir), 0.5);
 
-	// vec3 eye = vec3(1.*(-vGlobalTime), 5.8, 0.); // boxes
-	// SUN_DIRECTION = normalize(vec3(1.* cos(vGlobalTime),1.,1.* sin(vGlobalTime)));
+	// // vec3 eye = vec3(1.*(-global_time_in), 5.8, 0.); // boxes
+	// // SUN_DIRECTION = normalize(vec3(1.* cos(global_time_in),1.,1.* sin(global_time_in)));
 
-	gl_FragColor = vec4(color, 1.0);
+	gl_FragColor = vec4(color, dist);
 }
